@@ -5,6 +5,7 @@ import Chat from "./pages/Chat";
 import ForgotPassword from "./pages/ForgotPassword";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -20,6 +21,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <Chat />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <ProtectedRoute>
+            <Settings />
           </ProtectedRoute>
         }
       />

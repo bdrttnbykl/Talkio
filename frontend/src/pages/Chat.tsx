@@ -2,12 +2,14 @@ import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "re
 import {
   createConversation,
   createGroupConversation,
-  markConversationRead as markConversationReadRequest
+  markConversationRead as markConversationReadRequest,
+  removeConversationBackground,
+  uploadConversationBackground
 } from "../api/conversations.api";
-import { ChevronLeft, ChevronRight, Paperclip, Search, Send, Smile, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, ExternalLink, FileText, Paperclip, Pin, Search, Send, Smile, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { deleteMessage, sendMessage, updateMessage, uploadMessageFile } from "../api/messages.api";
-import { getUsers, removeChatBackground, uploadAvatar, uploadChatBackground } from "../api/users.api";
+import { deleteMessage, pinMessage, reactToMessage, sendMessage, updateMessage, uploadMessageFile } from "../api/messages.api";
+import { getUsers, uploadAvatar } from "../api/users.api";
 import ChatHeader from "../components/common/ChatHeader";
 import MessageBubble, { resolveAttachmentUrl } from "../components/common/MessageBubble";
 import Sidebar from "../components/common/Sidebar";
@@ -18,7 +20,7 @@ import { useSocket } from "../hooks/useSocket";
 import { SOCKET_EVENTS } from "../socket/socketEvents";
 import { useAuthStore } from "../store/authStore";
 import { useChatStore } from "../store/chatStore";
-import type { Message } from "../types/message";
+import type { Message, MessageReactionType } from "../types/message";
 import type { User } from "../types/user";
 
 const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024;
@@ -48,6 +50,62 @@ function readStoredRecord<T>(key: string, fallback: T) {
 
 function writeStoredValue(key: string, value: unknown) {
   localStorage.setItem(key, JSON.stringify(value));
+}
+
+function downloadTextFile(fileName: string, content: string, type = "text/plain") {
+  const blob = new Blob([content], { type: `${type};charset=utf-8` });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function toSafeFileName(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9ğüşıöç -]/gi, "")
+    .replace(/\s+/g, "-")
+    .slice(0, 60) || "sohbet";
+}
+
+function getConversationTitle(conversation: NonNullable<ReturnType<typeof useChatStore.getState>["conversations"][number]>) {
+  if (conversation.isGroup) return conversation.name ?? "Grup sohbeti";
+  return conversation.participants[0]?.name ?? "Sohbet";
+}
+
+function formatMessageForTxt(message: Message) {
+  const senderName = message.sender?.name ?? "Bilinmeyen";
+  const time = new Date(message.createdAt).toLocaleString();
+  const pieces = [`[${time}] ${senderName}: ${message.content || ""}`];
+
+  if (message.attachmentUrl) {
+    pieces.push(`Ek: ${message.attachmentName ?? "Dosya"} (${message.attachmentType ?? "bilinmeyen"}) ${message.attachmentUrl}`);
+  }
+
+  if (message.replyTo) {
+    pieces.push(`Yanitlanan: ${message.replyTo.content || message.replyTo.attachmentName || message.replyToId}`);
+  }
+
+  if (message.reactions?.length) {
+    pieces.push(`Tepkiler: ${message.reactions.map((reaction) => `${reaction.type}:${reaction.user?.name ?? reaction.userId}`).join(", ")}`);
+  }
+
+  if (message.isPinned) {
+    pieces.push("Sabitlendi");
+  }
+
+  return pieces.join("\n");
+}
+
+function formatAttachmentSize(size?: number | null) {
+  if (!size) return "";
+  if (size < 1024 * 1024) return `${Math.max(1, Math.round(size / 1024))} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export default function Chat() {
@@ -81,8 +139,12 @@ export default function Chat() {
   const [galleryIndex, setGalleryIndex] = useState<number | null>(null);
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const [isInfoOpen, setIsInfoOpen] = useState(false);
+  const [isMediaPanelOpen, setIsMediaPanelOpen] = useState(false);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [messageQuery, setMessageQuery] = useState("");
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  const [forwardMessage, setForwardMessage] = useState<Message | null>(null);
+  const [replyToMessage, setReplyToMessage] = useState<Message | null>(null);
   const [selectedMessageIds, setSelectedMessageIds] = useState<string[]>([]);
   const [blockedConversationIds, setBlockedConversationIds] = useState(() => readStoredArray("chatly_blocked_conversations"));
   const [deletedConversationIds, setDeletedConversationIds] = useState(() => readStoredArray("chatly_deleted_conversations"));
@@ -116,16 +178,37 @@ export default function Chat() {
     () => visibleMessagePool.filter((message) => message.attachmentUrl && message.attachmentType?.startsWith("image/")),
     [visibleMessagePool]
   );
-  const visibleMessages = useMemo(() => {
+  const pdfMessages = useMemo(
+    () => visibleMessagePool.filter((message) => message.attachmentUrl && message.attachmentType === "application/pdf"),
+    [visibleMessagePool]
+  );
+  const fileMessages = useMemo(
+    () =>
+      visibleMessagePool.filter(
+        (message) => message.attachmentUrl && !message.attachmentType?.startsWith("image/") && message.attachmentType !== "application/pdf"
+      ),
+    [visibleMessagePool]
+  );
+  const attachmentCount = imageMessages.length + pdfMessages.length + fileMessages.length;
+  const searchResults = useMemo(() => {
     const normalizedQuery = messageQuery.trim().toLowerCase();
-    if (!normalizedQuery) return visibleMessagePool;
+    if (!normalizedQuery) return [];
 
     return visibleMessagePool.filter((message) =>
-      `${message.content} ${message.attachmentName ?? ""}`.toLowerCase().includes(normalizedQuery)
+      `${message.content} ${message.attachmentName ?? ""} ${message.sender?.name ?? ""}`.toLowerCase().includes(normalizedQuery)
     );
   }, [messageQuery, visibleMessagePool]);
+  const visibleMessages = visibleMessagePool;
   const activeGalleryMessage = galleryIndex === null ? null : imageMessages[galleryIndex] ?? null;
-  const chatBackgroundUrl = activeConversationId && user?.chatBackgroundUrl ? resolveAttachmentUrl(user.chatBackgroundUrl) : null;
+  const pinnedMessage = useMemo(
+    () =>
+      visibleMessagePool
+        .filter((message) => message.isPinned)
+        .sort((first, second) => new Date(second.pinnedAt ?? second.createdAt).getTime() - new Date(first.pinnedAt ?? first.createdAt).getTime())[0] ??
+      null,
+    [visibleMessagePool]
+  );
+  const chatBackgroundUrl = activeConversation?.chatBackgroundUrl ? resolveAttachmentUrl(activeConversation.chatBackgroundUrl) : null;
   const chatBackgroundStyle = chatBackgroundUrl
     ? ({
         "--chat-bg": `url(${chatBackgroundUrl})`
@@ -162,10 +245,11 @@ export default function Chat() {
 
     try {
       const attachment = selectedFile ? await uploadMessageFile(selectedFile) : undefined;
-      const message = await sendMessage(activeConversationId, content.trim(), attachment);
+      const message = await sendMessage(activeConversationId, content.trim(), attachment, replyToMessage?.id);
       addMessage(message);
       socket.emit(SOCKET_EVENTS.SEND_MESSAGE, message);
       setContent("");
+      setReplyToMessage(null);
       setIsEmojiPickerOpen(false);
       clearSelectedFile();
     } finally {
@@ -183,6 +267,47 @@ export default function Chat() {
     const deletedMessage = await deleteMessage(message.id);
     removeMessage(deletedMessage.id);
     socket.emit(SOCKET_EVENTS.DELETE_MESSAGE, deletedMessage);
+  };
+
+  const handleReactMessage = async (message: Message, type: MessageReactionType) => {
+    const updatedMessage = await reactToMessage(message.id, type);
+    updateMessageInStore(updatedMessage);
+    socket.emit(SOCKET_EVENTS.REACT_MESSAGE, updatedMessage);
+  };
+
+  const handlePinMessage = async (message: Message) => {
+    const updatedMessage = await pinMessage(message.id);
+    updateMessageInStore(updatedMessage);
+    socket.emit(SOCKET_EVENTS.PIN_MESSAGE, updatedMessage);
+  };
+
+  const handleForwardMessage = async (conversationId: string) => {
+    if (!forwardMessage) return;
+
+    const forwardedMessage = await sendMessage(
+      conversationId,
+      forwardMessage.content,
+      forwardMessage.attachmentUrl
+        ? {
+            url: forwardMessage.attachmentUrl,
+            name: forwardMessage.attachmentName ?? "Ek",
+            type: forwardMessage.attachmentType ?? "application/octet-stream",
+            size: forwardMessage.attachmentSize ?? 0
+          }
+        : undefined
+    );
+
+    if (conversationId === activeConversationId) addMessage(forwardedMessage);
+    socket.emit(SOCKET_EVENTS.SEND_MESSAGE, forwardedMessage);
+    setForwardMessage(null);
+  };
+
+  const handleJumpToMessage = (messageId: string) => {
+    document.getElementById(`message-${messageId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlightedMessageId(messageId);
+    window.setTimeout(() => {
+      setHighlightedMessageId((currentId) => (currentId === messageId ? null : currentId));
+    }, 1800);
   };
 
   const handleToggleMessageSelect = (messageId: string) => {
@@ -237,10 +362,11 @@ export default function Chat() {
   };
 
   const handleBackgroundUpload = async (file: File) => {
-    if (!file.type.startsWith("image/")) return;
+    if (!activeConversationId || !file.type.startsWith("image/")) return;
 
-    const updatedUser = await uploadChatBackground(file);
-    updateUser(updatedUser);
+    const updatedConversation = await uploadConversationBackground(activeConversationId, file);
+    upsertConversation(updatedConversation);
+    socket.emit(SOCKET_EVENTS.UPDATE_CONVERSATION, updatedConversation);
   };
 
   const handleBackgroundFileChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -250,8 +376,11 @@ export default function Chat() {
   };
 
   const handleBackgroundRemove = async () => {
-    const updatedUser = await removeChatBackground();
-    updateUser(updatedUser);
+    if (!activeConversationId) return;
+
+    const updatedConversation = await removeConversationBackground(activeConversationId);
+    upsertConversation(updatedConversation);
+    socket.emit(SOCKET_EVENTS.UPDATE_CONVERSATION, updatedConversation);
   };
 
   const handleEnableNotifications = async () => {
@@ -296,8 +425,13 @@ export default function Chat() {
     setActiveConversationId(null);
     setIsEmojiPickerOpen(false);
     setIsInfoOpen(false);
+    setIsMediaPanelOpen(false);
+    setForwardMessage(null);
     setIsSelectionMode(false);
     setMessageQuery("");
+    setHighlightedMessageId(null);
+    setReplyToMessage(null);
+    setForwardMessage(null);
     setSelectedMessageIds([]);
   };
 
@@ -307,6 +441,57 @@ export default function Chat() {
     setDeletedConversationIds(nextDeletedConversationIds);
     writeStoredValue("chatly_deleted_conversations", nextDeletedConversationIds);
     handleCloseChat();
+  };
+
+  const handleExportTxt = () => {
+    if (!activeConversation) return;
+
+    const title = getConversationTitle(activeConversation);
+    const lines = [
+      `Sohbet: ${title}`,
+      `Disa aktarma: ${new Date().toLocaleString()}`,
+      `Mesaj sayisi: ${visibleMessagePool.length}`,
+      "",
+      ...visibleMessagePool.map((message) => formatMessageForTxt(message))
+    ];
+
+    downloadTextFile(`${toSafeFileName(title)}-sohbet.txt`, lines.join("\n"));
+  };
+
+  const handleExportJson = () => {
+    if (!activeConversation) return;
+
+    const title = getConversationTitle(activeConversation);
+    const payload = {
+      conversation: {
+        id: activeConversation.id,
+        name: activeConversation.name,
+        isGroup: activeConversation.isGroup,
+        title,
+        exportedAt: new Date().toISOString()
+      },
+      messages: visibleMessagePool.map((message) => ({
+        id: message.id,
+        content: message.content,
+        senderId: message.senderId,
+        senderName: message.sender?.name,
+        createdAt: message.createdAt,
+        editedAt: message.editedAt,
+        isPinned: message.isPinned,
+        attachment: message.attachmentUrl
+          ? {
+              url: message.attachmentUrl,
+              name: message.attachmentName,
+              type: message.attachmentType,
+              size: message.attachmentSize
+            }
+          : null,
+        replyToId: message.replyToId,
+        reactions: message.reactions ?? []
+      }))
+    };
+
+    downloadTextFile(`${toSafeFileName(title)}-sohbet.json`, JSON.stringify(payload, null, 2), "application/json");
   };
 
   const handleFavoriteChat = () => {
@@ -386,8 +571,10 @@ export default function Chat() {
   useEffect(() => {
     setIsEmojiPickerOpen(false);
     setIsInfoOpen(false);
+    setIsMediaPanelOpen(false);
     setIsSelectionMode(false);
     setMessageQuery("");
+    setReplyToMessage(null);
     setSelectedMessageIds([]);
   }, [activeConversationId]);
 
@@ -413,6 +600,10 @@ export default function Chat() {
       setActiveConversationId(null);
       setIsEmojiPickerOpen(false);
       setMessageQuery("");
+      setHighlightedMessageId(null);
+      setIsMediaPanelOpen(false);
+      setForwardMessage(null);
+      setReplyToMessage(null);
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -434,6 +625,7 @@ export default function Chat() {
         onAvatarUpload={handleAvatarUpload}
         onEnableNotifications={handleEnableNotifications}
         onLogout={handleLogout}
+        onOpenSettings={() => navigate("/settings")}
       />
       <section className="chat-panel">
         <ChatHeader
@@ -445,14 +637,18 @@ export default function Chat() {
           isMuted={Boolean(activeConversationId && mutedConversationIds.includes(activeConversationId))}
           onlineUserIds={onlineUserIds}
           onBlock={handleBlockChat}
+          onBackgroundRemove={handleBackgroundRemove}
           onBackgroundSelect={() => backgroundInputRef.current?.click()}
           onClearChat={handleClearChat}
           onCloseChat={handleCloseChat}
           onDeleteChat={handleDeleteChat}
+          onExportJson={handleExportJson}
+          onExportTxt={handleExportTxt}
           onFavorite={handleFavoriteChat}
           onInfo={() => setIsInfoOpen(true)}
           onList={handleListChat}
           onMute={handleMuteChat}
+          onOpenMedia={() => setIsMediaPanelOpen(true)}
           onReport={handleReportChat}
           onSelectMessages={() => setIsSelectionMode(true)}
           onSetDisappearing={handleSetDisappearing}
@@ -479,8 +675,34 @@ export default function Chat() {
             ) : null}
           </div>
         ) : null}
+        {activeConversationId && messageQuery.trim() ? (
+          <div className="search-results-bar">
+            <strong>{searchResults.length} sonuc</strong>
+            <div>
+              {searchResults.length > 0 ? (
+                searchResults.slice(0, 12).map((message) => (
+                  <button key={message.id} type="button" onClick={() => handleJumpToMessage(message.id)}>
+                    <span>{message.sender?.name ?? "Mesaj"}</span>
+                    {message.content || message.attachmentName || "Ek"}
+                  </button>
+                ))
+              ) : (
+                <p>Sonuc yok.</p>
+              )}
+            </div>
+          </div>
+        ) : null}
         {activeConversationId && isActiveBlocked ? (
           <div className="chat-notice">Bu sohbet engellendi. Mesaj gondermek icin menuden engeli kaldir.</div>
+        ) : null}
+        {activeConversationId && pinnedMessage ? (
+          <button className="pinned-message-bar" type="button" onClick={() => handleJumpToMessage(pinnedMessage.id)}>
+            <Pin size={17} />
+            <span>
+              <strong>Sabit mesaj</strong>
+              {pinnedMessage.content || pinnedMessage.attachmentName || "Ek"}
+            </span>
+          </button>
         ) : null}
         {isSelectionMode ? (
           <div className="selection-toolbar">
@@ -513,22 +735,39 @@ export default function Chat() {
                   key={message.id}
                   message={message}
                   isOwn={message.senderId === user?.id}
+                  currentUserId={user?.id}
+                  isHighlighted={highlightedMessageId === message.id}
                   isSelectable={isSelectionMode}
                   isSelected={selectedMessageIds.includes(message.id)}
                   onEdit={handleEditMessage}
                   onDelete={handleDeleteMessage}
+                  onForward={setForwardMessage}
                   onOpenImage={handleOpenImage}
+                  onPin={handlePinMessage}
+                  onReact={handleReactMessage}
+                  onReply={setReplyToMessage}
                   onToggleSelect={handleToggleMessageSelect}
                 />
               ))
             ) : (
-              <div className="empty-state">{messageQuery ? "Mesaj bulunamadi." : "Henuz mesaj yok."}</div>
+              <div className="empty-state">Henuz mesaj yok.</div>
             )
           ) : (
             <div className="empty-state">Sohbet baslat veya bir sohbet sec.</div>
           )}
         </div>
         <form className="message-form" onSubmit={handleSubmit}>
+          {replyToMessage ? (
+            <div className="reply-compose">
+              <div>
+                <strong>{replyToMessage.sender?.name ?? "Mesaj"}</strong>
+                <span>{replyToMessage.content || replyToMessage.attachmentName || "Ek"}</span>
+              </div>
+              <button type="button" aria-label="Yaniti kaldir" onClick={() => setReplyToMessage(null)}>
+                <X size={16} />
+              </button>
+            </div>
+          ) : null}
           {selectedFile ? (
             <div className="selected-file">
               <Paperclip size={16} />
@@ -613,6 +852,96 @@ export default function Chat() {
                 <dd>{activeConversationId && favoriteConversationIds.includes(activeConversationId) ? "Evet" : "Hayir"}</dd>
               </div>
             </dl>
+          </section>
+        </div>
+      ) : null}
+      {isMediaPanelOpen && activeConversation ? (
+        <div className="info-overlay" role="dialog" aria-modal="true">
+          <section className="media-panel">
+            <button className="info-close" type="button" aria-label="Close media panel" onClick={() => setIsMediaPanelOpen(false)}>
+              <X size={18} />
+            </button>
+            <header>
+              <h2>Medya ve dosyalar</h2>
+              <p>{attachmentCount} ek</p>
+            </header>
+            <div className="media-panel-content">
+              <section>
+                <h3>Gorseller</h3>
+                {imageMessages.length > 0 ? (
+                  <div className="media-grid">
+                    {imageMessages.map((message) => (
+                      <button
+                        key={message.id}
+                        type="button"
+                        onClick={() => {
+                          setIsMediaPanelOpen(false);
+                          handleOpenImage(message);
+                        }}
+                      >
+                        <img src={resolveAttachmentUrl(message.attachmentUrl!)} alt={message.attachmentName ?? "Resim"} />
+                        <span>{message.attachmentName ?? "Resim"}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="media-empty">Gorsel yok.</p>
+                )}
+              </section>
+              <section>
+                <h3>PDF ve dosyalar</h3>
+                {[...pdfMessages, ...fileMessages].length > 0 ? (
+                  <div className="media-file-list">
+                    {[...pdfMessages, ...fileMessages].map((message) => {
+                      const url = resolveAttachmentUrl(message.attachmentUrl!);
+
+                      return (
+                        <div key={message.id}>
+                          <FileText size={20} />
+                          <span>
+                            <strong>{message.attachmentName ?? "Dosya"}</strong>
+                            <small>{formatAttachmentSize(message.attachmentSize)} {message.attachmentType ?? "dosya"}</small>
+                          </span>
+                          <a href={url} target="_blank" rel="noreferrer" aria-label="Dosyayi ac">
+                            <ExternalLink size={16} />
+                          </a>
+                          <a href={url} download={message.attachmentName ?? true} aria-label="Dosyayi indir">
+                            <Download size={16} />
+                          </a>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="media-empty">Dosya yok.</p>
+                )}
+              </section>
+            </div>
+          </section>
+        </div>
+      ) : null}
+      {forwardMessage ? (
+        <div className="info-overlay" role="dialog" aria-modal="true">
+          <section className="forward-panel">
+            <button className="info-close" type="button" aria-label="Close forward panel" onClick={() => setForwardMessage(null)}>
+              <X size={18} />
+            </button>
+            <header>
+              <h2>Mesaji ilet</h2>
+              <p>{forwardMessage.content || forwardMessage.attachmentName || "Ek"}</p>
+            </header>
+            <div className="forward-list">
+              {visibleConversations.map((conversation) => {
+                const title = getConversationTitle(conversation);
+
+                return (
+                  <button key={conversation.id} type="button" onClick={() => handleForwardMessage(conversation.id)}>
+                    <span>{title.slice(0, 2).toUpperCase()}</span>
+                    <strong>{title}</strong>
+                  </button>
+                );
+              })}
+            </div>
           </section>
         </div>
       ) : null}

@@ -19,3 +19,19 @@ export const createGroupConversation = async (name: string, participantIds: stri
 export const markConversationRead = async (conversationId: string) => {
   await api.patch(`/conversations/${conversationId}/read`);
 };
+
+export const uploadConversationBackground = async (conversationId: string, file: File) => {
+  const formData = new FormData();
+  formData.append("background", file);
+
+  const { data } = await api.post<Conversation>(`/conversations/${conversationId}/background`, formData, {
+    headers: { "Content-Type": "multipart/form-data" }
+  });
+
+  return data;
+};
+
+export const removeConversationBackground = async (conversationId: string) => {
+  const { data } = await api.delete<Conversation>(`/conversations/${conversationId}/background`);
+  return data;
+};

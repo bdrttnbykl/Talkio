@@ -17,6 +17,11 @@ export const uploadAvatar = async (file: File) => {
   return data;
 };
 
+export const updateProfile = async (name: string, email: string) => {
+  const { data } = await api.patch<User>("/users/me", { name, email });
+  return data;
+};
+
 export const uploadChatBackground = async (file: File) => {
   const formData = new FormData();
   formData.append("background", file);

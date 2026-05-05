@@ -3,11 +3,14 @@ import {
   Ban,
   BellOff,
   CheckSquare,
+  Download,
   Eraser,
   Flag,
   Heart,
   Image,
+  ImageOff,
   Info,
+  Images,
   ListPlus,
   MoreVertical,
   Timer,
@@ -27,13 +30,17 @@ type ChatHeaderProps = {
   disappearingLabel: string;
   onBlock: () => void;
   onBackgroundSelect: () => void;
+  onBackgroundRemove: () => void;
   onClearChat: () => void;
   onCloseChat: () => void;
   onDeleteChat: () => void;
+  onExportJson: () => void;
+  onExportTxt: () => void;
   onFavorite: () => void;
   onInfo: () => void;
   onList: () => void;
   onMute: () => void;
+  onOpenMedia: () => void;
   onReport: () => void;
   onSelectMessages: () => void;
   onSetDisappearing: () => void;
@@ -49,13 +56,17 @@ export default function ChatHeader({
   onlineUserIds,
   onBlock,
   onBackgroundSelect,
+  onBackgroundRemove,
   onClearChat,
   onCloseChat,
   onDeleteChat,
+  onExportJson,
+  onExportTxt,
   onFavorite,
   onInfo,
   onList,
   onMute,
+  onOpenMedia,
   onReport,
   onSelectMessages,
   onSetDisappearing
@@ -99,6 +110,10 @@ export default function ChatHeader({
                 <CheckSquare size={18} />
                 <span>Mesaj sec</span>
               </button>
+              <button type="button" onClick={() => runAction(onOpenMedia, setIsMenuOpen)}>
+                <Images size={18} />
+                <span>Medya ve dosyalar</span>
+              </button>
               <button type="button" onClick={() => runAction(onMute, setIsMenuOpen)}>
                 <BellOff size={18} />
                 <span>{isMuted ? "Bildirimleri ac" : "Bildirimleri sessize al"}</span>
@@ -107,10 +122,24 @@ export default function ChatHeader({
                 <Timer size={18} />
                 <span>Sureli mesajlar: {disappearingLabel}</span>
               </button>
+              <button type="button" onClick={() => runAction(onExportTxt, setIsMenuOpen)}>
+                <Download size={18} />
+                <span>Sohbeti TXT indir</span>
+              </button>
+              <button type="button" onClick={() => runAction(onExportJson, setIsMenuOpen)}>
+                <Download size={18} />
+                <span>Sohbeti JSON indir</span>
+              </button>
               <button type="button" onClick={() => runAction(onBackgroundSelect, setIsMenuOpen)}>
                 <Image size={18} />
-                <span>Arka plan ekle</span>
+                <span>{conversation.chatBackgroundUrl ? "Arka plan degistir" : "Arka plan ekle"}</span>
               </button>
+              {conversation.chatBackgroundUrl ? (
+                <button type="button" onClick={() => runAction(onBackgroundRemove, setIsMenuOpen)}>
+                  <ImageOff size={18} />
+                  <span>Arka plani kaldir</span>
+                </button>
+              ) : null}
               <button type="button" onClick={() => runAction(onFavorite, setIsMenuOpen)}>
                 <Heart size={18} />
                 <span>{isFavorite ? "Favorilerden kaldir" : "Favorilere ekle"}</span>

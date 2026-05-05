@@ -5,6 +5,7 @@ export type Conversation = {
   id: string;
   name?: string | null;
   isGroup?: boolean;
+  chatBackgroundUrl?: string | null;
   participants: User[];
   messages?: Message[];
   unreadCount?: number;

@@ -1,5 +1,5 @@
 import { api } from "./axios";
-import type { Message } from "../types/message";
+import type { Message, MessageReactionType } from "../types/message";
 
 export type MessageAttachment = {
   url: string;
@@ -13,8 +13,8 @@ export const getMessages = async (conversationId: string) => {
   return data;
 };
 
-export const sendMessage = async (conversationId: string, content: string, attachment?: MessageAttachment) => {
-  const { data } = await api.post<Message>("/messages", { conversationId, content, attachment });
+export const sendMessage = async (conversationId: string, content: string, attachment?: MessageAttachment, replyToId?: string) => {
+  const { data } = await api.post<Message>("/messages", { conversationId, content, attachment, replyToId });
   return data;
 };
 
@@ -36,5 +36,15 @@ export const updateMessage = async (messageId: string, content: string) => {
 
 export const deleteMessage = async (messageId: string) => {
   const { data } = await api.delete<{ id: string; conversationId: string }>(`/messages/${messageId}`);
+  return data;
+};
+
+export const reactToMessage = async (messageId: string, type: MessageReactionType) => {
+  const { data } = await api.post<Message>(`/messages/${messageId}/reactions`, { type });
+  return data;
+};
+
+export const pinMessage = async (messageId: string) => {
+  const { data } = await api.post<Message>(`/messages/${messageId}/pin`);
   return data;
 };

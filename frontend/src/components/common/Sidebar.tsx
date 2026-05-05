@@ -1,6 +1,6 @@
 import type { Conversation } from "../../types/conversation";
 import type { User } from "../../types/user";
-import { Bell, Camera, Search, Users } from "lucide-react";
+import { Bell, Camera, Search, Settings, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import Avatar from "./Avatar";
 
@@ -17,6 +17,7 @@ type SidebarProps = {
   onAvatarUpload: (file: File) => void;
   onEnableNotifications: () => void;
   onLogout: () => void;
+  onOpenSettings: () => void;
 };
 
 export default function Sidebar({
@@ -31,7 +32,8 @@ export default function Sidebar({
   onStartGroup,
   onAvatarUpload,
   onEnableNotifications,
-  onLogout
+  onLogout,
+  onOpenSettings
 }: SidebarProps) {
   const [query, setQuery] = useState("");
   const [isGroupFormOpen, setIsGroupFormOpen] = useState(false);
@@ -78,6 +80,9 @@ export default function Sidebar({
         <h1>Chatly</h1>
         <button className="logout-button" type="button" onClick={onLogout}>
           Cikis
+        </button>
+        <button className="settings-button" type="button" aria-label="Ayarlar" onClick={onOpenSettings}>
+          <Settings size={18} />
         </button>
       </div>
       {currentUser ? (

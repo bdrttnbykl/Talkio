@@ -20,6 +20,10 @@ export function useSocket() {
     socket.auth = { token };
     socket.connect();
     socket.emit(SOCKET_EVENTS.PRESENCE_SYNC);
+    socket.on(SOCKET_EVENTS.CONVERSATION_UPDATED, () => {
+      const { setConversations } = useChatStore.getState();
+      getConversations().then(setConversations).catch(console.error);
+    });
     socket.on(SOCKET_EVENTS.NEW_MESSAGE, (message: Message) => {
       const { activeConversationId, addMessage, incrementUnread, setConversations } = useChatStore.getState();
 
@@ -39,6 +43,14 @@ export function useSocket() {
       const { updateMessage, setConversations } = useChatStore.getState();
       updateMessage(message);
       getConversations().then(setConversations).catch(console.error);
+    });
+    socket.on(SOCKET_EVENTS.MESSAGE_REACTED, (message: Message) => {
+      const { updateMessage } = useChatStore.getState();
+      updateMessage(message);
+    });
+    socket.on(SOCKET_EVENTS.MESSAGE_PINNED, (message: Message) => {
+      const { updateMessage } = useChatStore.getState();
+      updateMessage(message);
     });
     socket.on(SOCKET_EVENTS.MESSAGE_DELETED, (payload: { id: string; conversationId: string }) => {
       const { removeMessage, setConversations } = useChatStore.getState();
@@ -61,7 +73,10 @@ export function useSocket() {
 
     return () => {
       socket.off(SOCKET_EVENTS.NEW_MESSAGE);
+      socket.off(SOCKET_EVENTS.CONVERSATION_UPDATED);
       socket.off(SOCKET_EVENTS.MESSAGE_UPDATED);
+      socket.off(SOCKET_EVENTS.MESSAGE_REACTED);
+      socket.off(SOCKET_EVENTS.MESSAGE_PINNED);
       socket.off(SOCKET_EVENTS.MESSAGE_DELETED);
       socket.off(SOCKET_EVENTS.CONVERSATION_READ);
       socket.off(SOCKET_EVENTS.PRESENCE_LIST);
@@ -84,6 +99,8 @@ function showMessageNotification(message: Message) {
 
 function isConversationMuted(conversationId: string) {
   try {
+    if (localStorage.getItem("chatly_mute_all") === "true") return true;
+
     const mutedConversationIds = JSON.parse(localStorage.getItem("chatly_muted_conversations") ?? "[]") as string[];
     return mutedConversationIds.includes(conversationId);
   } catch {
