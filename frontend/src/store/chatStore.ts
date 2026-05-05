@@ -6,12 +6,18 @@ type ChatState = {
   conversations: Conversation[];
   activeConversationId: string | null;
   messages: Message[];
+  onlineUserIds: string[];
   unreadCounts: Record<string, number>;
   setConversations: (conversations: Conversation[]) => void;
   upsertConversation: (conversation: Conversation) => void;
   setActiveConversationId: (conversationId: string | null) => void;
   setMessages: (messages: Message[]) => void;
   addMessage: (message: Message) => void;
+  updateMessage: (message: Message) => void;
+  removeMessage: (messageId: string) => void;
+  markMessagesRead: (conversationId: string, readerId: string) => void;
+  setOnlineUsers: (userIds: string[]) => void;
+  setUserPresence: (userId: string, isOnline: boolean) => void;
   incrementUnread: (conversationId: string) => void;
   markConversationRead: (conversationId: string) => void;
   reset: () => void;
@@ -21,6 +27,7 @@ export const useChatStore = create<ChatState>((set) => ({
   conversations: [],
   activeConversationId: null,
   messages: [],
+  onlineUserIds: [],
   unreadCounts: {},
   setConversations: (conversations) =>
     set((state) => {
@@ -53,6 +60,27 @@ export const useChatStore = create<ChatState>((set) => ({
   setActiveConversationId: (activeConversationId) => set({ activeConversationId }),
   setMessages: (messages) => set({ messages }),
   addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
+  updateMessage: (message) =>
+    set((state) => ({
+      messages: state.messages.map((item) => (item.id === message.id ? message : item))
+    })),
+  removeMessage: (messageId) =>
+    set((state) => ({
+      messages: state.messages.filter((message) => message.id !== messageId)
+    })),
+  markMessagesRead: (conversationId, readerId) =>
+    set((state) => ({
+      messages: state.messages.map((message) =>
+        message.conversationId === conversationId && message.senderId !== readerId ? { ...message, readByOthers: true } : message
+      )
+    })),
+  setOnlineUsers: (onlineUserIds) => set({ onlineUserIds }),
+  setUserPresence: (userId, isOnline) =>
+    set((state) => ({
+      onlineUserIds: isOnline
+        ? Array.from(new Set([...state.onlineUserIds, userId]))
+        : state.onlineUserIds.filter((onlineUserId) => onlineUserId !== userId)
+    })),
   incrementUnread: (conversationId) =>
     set((state) => ({
       unreadCounts: {
@@ -67,5 +95,5 @@ export const useChatStore = create<ChatState>((set) => ({
       const { [conversationId]: _readConversation, ...unreadCounts } = state.unreadCounts;
       return { unreadCounts };
     }),
-  reset: () => set({ conversations: [], activeConversationId: null, messages: [], unreadCounts: {} })
+  reset: () => set({ conversations: [], activeConversationId: null, messages: [], onlineUserIds: [], unreadCounts: {} })
 }));

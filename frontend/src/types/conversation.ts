@@ -3,6 +3,8 @@ import type { User } from "./user";
 
 export type Conversation = {
   id: string;
+  name?: string | null;
+  isGroup?: boolean;
   participants: User[];
   messages?: Message[];
   unreadCount?: number;

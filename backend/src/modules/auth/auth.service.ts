@@ -7,6 +7,8 @@ const userSelect = {
   name: true,
   email: true,
   avatarUrl: true,
+  chatBackgroundUrl: true,
+  lastSeenAt: true,
   createdAt: true
 };
 

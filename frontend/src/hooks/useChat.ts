@@ -12,7 +12,6 @@ export function useChat() {
 
   useEffect(() => {
     if (!activeConversationId) {
-      setMessages([]);
       return;
     }
 

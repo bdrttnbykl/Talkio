@@ -11,6 +11,11 @@ export const createConversation = async (participantId: string) => {
   return data;
 };
 
+export const createGroupConversation = async (name: string, participantIds: string[]) => {
+  const { data } = await api.post<Conversation>("/conversations", { name, participantIds });
+  return data;
+};
+
 export const markConversationRead = async (conversationId: string) => {
   await api.patch(`/conversations/${conversationId}/read`);
 };

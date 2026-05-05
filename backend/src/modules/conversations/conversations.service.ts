@@ -4,7 +4,7 @@ const conversationInclude = {
   participants: {
     include: {
       user: {
-        select: { id: true, name: true, email: true, avatarUrl: true, createdAt: true }
+        select: { id: true, name: true, email: true, avatarUrl: true, lastSeenAt: true, createdAt: true }
       }
     }
   },
@@ -26,10 +26,10 @@ async function getUnreadCount(userId: string, conversationId: string) {
   });
 }
 
-async function formatConversation<T extends { id: string; participants: Array<{ user: unknown }> }>(userId: string, conversation: T) {
+async function formatConversation<T extends { id: string; participants: Array<{ user: { id: string } }> }>(userId: string, conversation: T) {
   return {
     ...conversation,
-    participants: conversation.participants.map((participant) => participant.user),
+    participants: conversation.participants.map((participant) => participant.user).filter((participant) => participant.id !== userId),
     unreadCount: await getUnreadCount(userId, conversation.id)
   };
 }
@@ -42,7 +42,7 @@ export async function listConversations(userId: string) {
         where: { userId: { not: userId } },
         include: {
           user: {
-            select: { id: true, name: true, email: true, avatarUrl: true, createdAt: true }
+            select: { id: true, name: true, email: true, avatarUrl: true, lastSeenAt: true, createdAt: true }
           }
         }
       },
@@ -57,6 +57,7 @@ export async function listConversations(userId: string) {
 export async function createConversation(userId: string, participantId: string) {
   const existingConversation = await prisma.conversation.findFirst({
     where: {
+      isGroup: false,
       AND: [
         { participants: { some: { userId } } },
         { participants: { some: { userId: participantId } } }
@@ -77,6 +78,27 @@ export async function createConversation(userId: string, participantId: string) 
     data: {
       participants: {
         create: [{ userId, lastReadAt: new Date() }, { userId: participantId }]
+      }
+    },
+    include: conversationInclude
+  });
+
+  return formatConversation(userId, conversation);
+}
+
+export async function createGroupConversation(userId: string, name: string, participantIds: string[]) {
+  const uniqueParticipantIds = [...new Set(participantIds)].filter((participantId) => participantId !== userId);
+
+  if (uniqueParticipantIds.length < 2) {
+    throw new Error("Select at least two people for a group");
+  }
+
+  const conversation = await prisma.conversation.create({
+    data: {
+      name,
+      isGroup: true,
+      participants: {
+        create: [{ userId, lastReadAt: new Date() }, ...uniqueParticipantIds.map((participantId) => ({ userId: participantId }))]
       }
     },
     include: conversationInclude

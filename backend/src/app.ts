@@ -1,5 +1,6 @@
 import cors from "cors";
 import express from "express";
+import path from "path";
 import { env } from "./config/env.js";
 import { authRoutes } from "./modules/auth/auth.routes.js";
 import { conversationsRoutes } from "./modules/conversations/conversations.routes.js";
@@ -10,6 +11,7 @@ export const app = express();
 
 app.use(cors({ origin: env.clientUrl, credentials: true }));
 app.use(express.json());
+app.use("/uploads", express.static(path.resolve("uploads")));
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 app.use("/api/auth", authRoutes);

@@ -5,3 +5,5 @@ dist/
 *.db
 .env
 .env.local
+uploads/
+backend/uploads/
