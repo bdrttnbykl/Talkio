@@ -1,6 +1,12 @@
 import type { Response } from "express";
 import type { AuthRequest } from "../../middlewares/auth.middleware.js";
-import { createConversation, createGroupConversation, listConversations, markConversationRead } from "./conversations.service.js";
+import {
+  createConversation,
+  createGroupConversation,
+  listConversations,
+  markConversationRead,
+  updateConversationBackground
+} from "./conversations.service.js";
 
 export async function getConversations(req: AuthRequest, res: Response) {
   const conversations = await listConversations(req.userId!);
@@ -37,4 +43,38 @@ export async function readConversation(req: AuthRequest, res: Response) {
 
   await markConversationRead(req.userId!, conversationId);
   return res.status(204).send();
+}
+
+export async function uploadConversationBackground(req: AuthRequest, res: Response) {
+  try {
+    const { conversationId } = req.params;
+
+    if (typeof conversationId !== "string") {
+      return res.status(400).json({ message: "conversationId is required" });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ message: "image is required" });
+    }
+
+    const conversation = await updateConversationBackground(req.userId!, conversationId, `/uploads/backgrounds/${req.file.filename}`);
+    return res.status(201).json(conversation);
+  } catch (error) {
+    return res.status(400).json({ message: error instanceof Error ? error.message : "Background upload failed" });
+  }
+}
+
+export async function removeConversationBackground(req: AuthRequest, res: Response) {
+  try {
+    const { conversationId } = req.params;
+
+    if (typeof conversationId !== "string") {
+      return res.status(400).json({ message: "conversationId is required" });
+    }
+
+    const conversation = await updateConversationBackground(req.userId!, conversationId, null);
+    return res.json(conversation);
+  } catch (error) {
+    return res.status(400).json({ message: error instanceof Error ? error.message : "Background remove failed" });
+  }
 }

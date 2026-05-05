@@ -8,27 +8,29 @@ datasource db {
 }
 
 model User {
-  id             String           @id @default(cuid())
-  name           String
-  email          String           @unique
-  password       String
-  avatarUrl      String?
+  id                String            @id @default(cuid())
+  name              String
+  email             String            @unique
+  password          String
+  avatarUrl         String?
   chatBackgroundUrl String?
-  lastSeenAt     DateTime?
-  messages       Message[]
-  participations Participant[]
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  lastSeenAt        DateTime?
+  messages          Message[]
+  reactions         MessageReaction[]
+  participations    Participant[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 }
 
 model Conversation {
-  id           String        @id @default(cuid())
-  name         String?
-  isGroup      Boolean       @default(false)
-  participants Participant[]
-  messages     Message[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id                String        @id @default(cuid())
+  name              String?
+  isGroup           Boolean       @default(false)
+  chatBackgroundUrl String?
+  participants      Participant[]
+  messages          Message[]
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 }
 
 model Participant {
@@ -43,16 +45,34 @@ model Participant {
 }
 
 model Message {
-  id             String       @id @default(cuid())
+  id             String            @id @default(cuid())
   content        String
   attachmentUrl  String?
   attachmentName String?
   attachmentType String?
   attachmentSize Int?
+  replyToId      String?
   senderId       String
   conversationId String
-  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  createdAt      DateTime     @default(now())
-  editedAt        DateTime?
+  replyTo        Message?          @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies        Message[]         @relation("MessageReplies")
+  reactions      MessageReaction[]
+  sender         User              @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  conversation   Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime          @default(now())
+  editedAt       DateTime?
+  isPinned       Boolean           @default(false)
+  pinnedAt       DateTime?
+}
+
+model MessageReaction {
+  id        String   @id @default(cuid())
+  type      String
+  userId    String
+  messageId String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, messageId])
 }

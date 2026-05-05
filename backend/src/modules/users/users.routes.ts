@@ -3,7 +3,7 @@ import multer from "multer";
 import path from "path";
 import { Router } from "express";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
-import { getUsers, removeChatBackground, uploadAvatar, uploadChatBackground } from "./users.controller.js";
+import { getUsers, patchMe, removeChatBackground, uploadAvatar, uploadChatBackground } from "./users.controller.js";
 
 export const usersRoutes = Router();
 
@@ -45,6 +45,7 @@ const backgroundUpload = multer({
 });
 
 usersRoutes.get("/", authMiddleware, getUsers);
+usersRoutes.patch("/me", authMiddleware, patchMe);
 usersRoutes.post("/me/avatar", authMiddleware, avatarUpload.single("avatar"), uploadAvatar);
 usersRoutes.post("/me/background", authMiddleware, backgroundUpload.single("background"), uploadChatBackground);
 usersRoutes.delete("/me/background", authMiddleware, removeChatBackground);

@@ -3,7 +3,7 @@ import multer from "multer";
 import path from "path";
 import { Router } from "express";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
-import { getMessages, patchMessage, postMessage, removeMessage, uploadMessageFile } from "./messages.controller.js";
+import { getMessages, patchMessage, pinMessage, postMessage, reactToMessage, removeMessage, uploadMessageFile } from "./messages.controller.js";
 
 export const messagesRoutes = Router();
 
@@ -27,5 +27,7 @@ const upload = multer({
 messagesRoutes.get("/:conversationId", authMiddleware, getMessages);
 messagesRoutes.post("/", authMiddleware, postMessage);
 messagesRoutes.post("/uploads", authMiddleware, upload.single("file"), uploadMessageFile);
+messagesRoutes.post("/:messageId/reactions", authMiddleware, reactToMessage);
+messagesRoutes.post("/:messageId/pin", authMiddleware, pinMessage);
 messagesRoutes.patch("/:messageId", authMiddleware, patchMessage);
 messagesRoutes.delete("/:messageId", authMiddleware, removeMessage);

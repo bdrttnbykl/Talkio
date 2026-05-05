@@ -113,3 +113,22 @@ export async function markConversationRead(userId: string, conversationId: strin
     data: { lastReadAt: new Date() }
   });
 }
+
+export async function updateConversationBackground(userId: string, conversationId: string, chatBackgroundUrl: string | null) {
+  const participant = await prisma.participant.findUnique({
+    where: { userId_conversationId: { userId, conversationId } },
+    select: { id: true }
+  });
+
+  if (!participant) {
+    throw new Error("Conversation not found");
+  }
+
+  const conversation = await prisma.conversation.update({
+    where: { id: conversationId },
+    data: { chatBackgroundUrl },
+    include: conversationInclude
+  });
+
+  return formatConversation(userId, conversation);
+}

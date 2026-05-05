@@ -3,10 +3,16 @@ import { prisma } from "../config/prisma.js";
 
 const SOCKET_EVENTS = {
   JOIN_CONVERSATION: "conversation:join",
+  UPDATE_CONVERSATION: "conversation:update",
+  CONVERSATION_UPDATED: "conversation:updated",
   SEND_MESSAGE: "message:send",
   NEW_MESSAGE: "message:new",
   UPDATE_MESSAGE: "message:update",
   MESSAGE_UPDATED: "message:updated",
+  REACT_MESSAGE: "message:react",
+  MESSAGE_REACTED: "message:reacted",
+  PIN_MESSAGE: "message:pin",
+  MESSAGE_PINNED: "message:pinned",
   DELETE_MESSAGE: "message:delete",
   MESSAGE_DELETED: "message:deleted",
   MARK_READ: "conversation:read",
@@ -18,6 +24,19 @@ export function registerChatSocket(io: Server, socket: Socket) {
 
   socket.on(SOCKET_EVENTS.JOIN_CONVERSATION, (conversationId: string) => {
     socket.join(conversationId);
+  });
+
+  socket.on(SOCKET_EVENTS.UPDATE_CONVERSATION, async (conversation) => {
+    if (!conversation?.id) return;
+
+    const participant = await prisma.participant.findUnique({
+      where: { userId_conversationId: { userId: socket.data.userId, conversationId: conversation.id } },
+      select: { id: true }
+    });
+
+    if (!participant) return;
+
+    await emitToOtherParticipants(io, socket, conversation.id, SOCKET_EVENTS.CONVERSATION_UPDATED, conversation);
   });
 
   socket.on(SOCKET_EVENTS.SEND_MESSAGE, async (message) => {
@@ -51,6 +70,40 @@ export function registerChatSocket(io: Server, socket: Socket) {
     if (!existingMessage) return;
 
     await emitToOtherParticipants(io, socket, message.conversationId, SOCKET_EVENTS.MESSAGE_UPDATED, message);
+  });
+
+  socket.on(SOCKET_EVENTS.REACT_MESSAGE, async (message) => {
+    if (!message?.id || !message?.conversationId) return;
+
+    const existingMessage = await prisma.message.findFirst({
+      where: {
+        id: message.id,
+        conversationId: message.conversationId,
+        conversation: { participants: { some: { userId: socket.data.userId } } }
+      },
+      select: { id: true }
+    });
+
+    if (!existingMessage) return;
+
+    await emitToOtherParticipants(io, socket, message.conversationId, SOCKET_EVENTS.MESSAGE_REACTED, message);
+  });
+
+  socket.on(SOCKET_EVENTS.PIN_MESSAGE, async (message) => {
+    if (!message?.id || !message?.conversationId) return;
+
+    const existingMessage = await prisma.message.findFirst({
+      where: {
+        id: message.id,
+        conversationId: message.conversationId,
+        conversation: { participants: { some: { userId: socket.data.userId } } }
+      },
+      select: { id: true }
+    });
+
+    if (!existingMessage) return;
+
+    await emitToOtherParticipants(io, socket, message.conversationId, SOCKET_EVENTS.MESSAGE_PINNED, message);
   });
 
   socket.on(SOCKET_EVENTS.DELETE_MESSAGE, async (payload) => {
