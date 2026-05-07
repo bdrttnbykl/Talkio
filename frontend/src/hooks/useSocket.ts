@@ -99,9 +99,9 @@ function showMessageNotification(message: Message) {
 
 function isConversationMuted(conversationId: string) {
   try {
-    if (localStorage.getItem("chatly_mute_all") === "true") return true;
+    if (localStorage.getItem("talkio_mute_all") === "true") return true;
 
-    const mutedConversationIds = JSON.parse(localStorage.getItem("chatly_muted_conversations") ?? "[]") as string[];
+    const mutedConversationIds = JSON.parse(localStorage.getItem("talkio_muted_conversations") ?? "[]") as string[];
     return mutedConversationIds.includes(conversationId);
   } catch {
     return false;

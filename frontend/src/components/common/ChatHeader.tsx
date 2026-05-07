@@ -26,6 +26,7 @@ type ChatHeaderProps = {
   isFavorite: boolean;
   isListed: boolean;
   isMuted: boolean;
+  hasBackground: boolean;
   onlineUserIds: string[];
   disappearingLabel: string;
   onBlock: () => void;
@@ -49,6 +50,7 @@ type ChatHeaderProps = {
 export default function ChatHeader({
   conversation,
   disappearingLabel,
+  hasBackground,
   isBlocked,
   isFavorite,
   isListed,
@@ -132,9 +134,9 @@ export default function ChatHeader({
               </button>
               <button type="button" onClick={() => runAction(onBackgroundSelect, setIsMenuOpen)}>
                 <Image size={18} />
-                <span>{conversation.chatBackgroundUrl ? "Arka plan degistir" : "Arka plan ekle"}</span>
+                <span>{hasBackground ? "Arka plan degistir" : "Arka plan ekle"}</span>
               </button>
-              {conversation.chatBackgroundUrl ? (
+              {hasBackground ? (
                 <button type="button" onClick={() => runAction(onBackgroundRemove, setIsMenuOpen)}>
                   <ImageOff size={18} />
                   <span>Arka plani kaldir</span>

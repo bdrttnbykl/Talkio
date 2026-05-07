@@ -20,6 +20,11 @@ export const markConversationRead = async (conversationId: string) => {
   await api.patch(`/conversations/${conversationId}/read`);
 };
 
+export const updateDisappearingMessages = async (conversationId: string, durationSeconds: number | null) => {
+  const { data } = await api.patch<Conversation>(`/conversations/${conversationId}/disappearing-messages`, { durationSeconds });
+  return data;
+};
+
 export const uploadConversationBackground = async (conversationId: string, file: File) => {
   const formData = new FormData();
   formData.append("background", file);

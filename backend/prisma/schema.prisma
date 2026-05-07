@@ -23,14 +23,15 @@ model User {
 }
 
 model Conversation {
-  id                String        @id @default(cuid())
-  name              String?
-  isGroup           Boolean       @default(false)
-  chatBackgroundUrl String?
-  participants      Participant[]
-  messages          Message[]
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  id                          String        @id @default(cuid())
+  name                        String?
+  isGroup                     Boolean       @default(false)
+  chatBackgroundUrl           String?
+  disappearingDurationSeconds Int?
+  participants                Participant[]
+  messages                    Message[]
+  createdAt                   DateTime      @default(now())
+  updatedAt                   DateTime      @updatedAt
 }
 
 model Participant {
@@ -61,6 +62,7 @@ model Message {
   conversation   Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   createdAt      DateTime          @default(now())
   editedAt       DateTime?
+  expiresAt      DateTime?
   isPinned       Boolean           @default(false)
   pinnedAt       DateTime?
 }

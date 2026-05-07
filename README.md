@@ -1,4 +1,4 @@
-# Chatly
+# Talkio
 
 Full-stack realtime chat application scaffold.
 
@@ -21,4 +21,27 @@ npm run dev
 cd frontend
 npm install
 npm run dev
+```
+
+## Deployment
+
+- Frontend: Vercel, root directory `frontend`.
+- Backend: Render Web Service, root directory `backend`.
+- Database: Neon PostgreSQL, set Render `DATABASE_URL` with Neon pooled connection string.
+
+Production environment variables:
+
+Backend:
+
+```bash
+DATABASE_URL="postgresql://USER:PASSWORD@HOST/DB?sslmode=require"
+JWT_SECRET="replace-with-a-long-random-secret"
+CLIENT_URLS="https://your-talkio-app.vercel.app"
+```
+
+Frontend:
+
+```bash
+VITE_API_URL="https://your-talkio-backend.onrender.com/api"
+VITE_SOCKET_URL="https://your-talkio-backend.onrender.com"
 ```

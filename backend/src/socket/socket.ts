@@ -18,7 +18,7 @@ function emitPresence(io: Server, userId: string, isOnline: boolean, lastSeenAt?
 export function createSocketServer(server: HttpServer) {
   const io = new Server(server, {
     cors: {
-      origin: env.clientUrl,
+      origin: env.clientUrls,
       credentials: true
     }
   });

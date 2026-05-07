@@ -77,7 +77,7 @@ export default function Sidebar({
   return (
     <aside className="sidebar">
       <div className="sidebar-top">
-        <h1>Chatly</h1>
+        <h1>Talkio</h1>
         <button className="logout-button" type="button" onClick={onLogout}>
           Cikis
         </button>

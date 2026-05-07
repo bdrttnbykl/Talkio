@@ -3,13 +3,12 @@ import {
   createConversation,
   createGroupConversation,
   markConversationRead as markConversationReadRequest,
-  removeConversationBackground,
-  uploadConversationBackground
+  updateDisappearingMessages,
 } from "../api/conversations.api";
 import { ChevronLeft, ChevronRight, Download, ExternalLink, FileText, Paperclip, Pin, Search, Send, Smile, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { deleteMessage, pinMessage, reactToMessage, sendMessage, updateMessage, uploadMessageFile } from "../api/messages.api";
-import { getUsers, uploadAvatar } from "../api/users.api";
+import { getUsers, removeChatBackground, uploadAvatar, uploadChatBackground } from "../api/users.api";
 import ChatHeader from "../components/common/ChatHeader";
 import MessageBubble, { resolveAttachmentUrl } from "../components/common/MessageBubble";
 import Sidebar from "../components/common/Sidebar";
@@ -26,9 +25,12 @@ import type { User } from "../types/user";
 const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024;
 const EMOJIS = ["😀", "😂", "😍", "😎", "🥳", "😢", "😡", "👍", "🙏", "👏", "🔥", "❤️", "💯", "✅", "✨", "🎉", "🤔", "🙌", "😅", "😴"];
 
-const DISAPPEARING_OPTIONS = ["Kapali", "24s", "7g", "90g"] as const;
-
-type DisappearingOption = (typeof DISAPPEARING_OPTIONS)[number];
+const DISAPPEARING_OPTIONS = [
+  { label: "Kapali", durationSeconds: null },
+  { label: "24s", durationSeconds: 24 * 60 * 60 },
+  { label: "7g", durationSeconds: 7 * 24 * 60 * 60 },
+  { label: "90g", durationSeconds: 90 * 24 * 60 * 60 }
+] as const;
 
 function readStoredArray(key: string) {
   try {
@@ -36,15 +38,6 @@ function readStoredArray(key: string) {
     return value ? (JSON.parse(value) as string[]) : [];
   } catch {
     return [];
-  }
-}
-
-function readStoredRecord<T>(key: string, fallback: T) {
-  try {
-    const value = localStorage.getItem(key);
-    return value ? (JSON.parse(value) as T) : fallback;
-  } catch {
-    return fallback;
   }
 }
 
@@ -142,20 +135,18 @@ export default function Chat() {
   const [isMediaPanelOpen, setIsMediaPanelOpen] = useState(false);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [messageQuery, setMessageQuery] = useState("");
+  const [expiryTick, setExpiryTick] = useState(() => Date.now());
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const [forwardMessage, setForwardMessage] = useState<Message | null>(null);
   const [replyToMessage, setReplyToMessage] = useState<Message | null>(null);
   const [selectedMessageIds, setSelectedMessageIds] = useState<string[]>([]);
-  const [blockedConversationIds, setBlockedConversationIds] = useState(() => readStoredArray("chatly_blocked_conversations"));
-  const [deletedConversationIds, setDeletedConversationIds] = useState(() => readStoredArray("chatly_deleted_conversations"));
-  const [favoriteConversationIds, setFavoriteConversationIds] = useState(() => readStoredArray("chatly_favorite_conversations"));
-  const [hiddenMessageIds, setHiddenMessageIds] = useState(() => readStoredArray("chatly_hidden_messages"));
-  const [listedConversationIds, setListedConversationIds] = useState(() => readStoredArray("chatly_listed_conversations"));
-  const [mutedConversationIds, setMutedConversationIds] = useState(() => readStoredArray("chatly_muted_conversations"));
-  const [reportedConversationIds, setReportedConversationIds] = useState(() => readStoredArray("chatly_reported_conversations"));
-  const [disappearingByConversation, setDisappearingByConversation] = useState(() =>
-    readStoredRecord<Record<string, DisappearingOption>>("chatly_disappearing_conversations", {})
-  );
+  const [blockedConversationIds, setBlockedConversationIds] = useState(() => readStoredArray("talkio_blocked_conversations"));
+  const [deletedConversationIds, setDeletedConversationIds] = useState(() => readStoredArray("talkio_deleted_conversations"));
+  const [favoriteConversationIds, setFavoriteConversationIds] = useState(() => readStoredArray("talkio_favorite_conversations"));
+  const [hiddenMessageIds, setHiddenMessageIds] = useState(() => readStoredArray("talkio_hidden_messages"));
+  const [listedConversationIds, setListedConversationIds] = useState(() => readStoredArray("talkio_listed_conversations"));
+  const [mutedConversationIds, setMutedConversationIds] = useState(() => readStoredArray("talkio_muted_conversations"));
+  const [reportedConversationIds, setReportedConversationIds] = useState(() => readStoredArray("talkio_reported_conversations"));
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">(
     "Notification" in window ? Notification.permission : "unsupported"
   );
@@ -171,8 +162,8 @@ export default function Chat() {
   const isActiveBlocked = Boolean(activeConversationId && blockedConversationIds.includes(activeConversationId));
   const canSendMessage = Boolean(activeConversationId && !isActiveBlocked && (content.trim() || selectedFile) && !isSending);
   const visibleMessagePool = useMemo(
-    () => messages.filter((message) => !hiddenMessageIds.includes(message.id)),
-    [hiddenMessageIds, messages]
+    () => messages.filter((message) => !hiddenMessageIds.includes(message.id) && (!message.expiresAt || new Date(message.expiresAt).getTime() > expiryTick)),
+    [expiryTick, hiddenMessageIds, messages]
   );
   const imageMessages = useMemo(
     () => visibleMessagePool.filter((message) => message.attachmentUrl && message.attachmentType?.startsWith("image/")),
@@ -208,13 +199,17 @@ export default function Chat() {
       null,
     [visibleMessagePool]
   );
-  const chatBackgroundUrl = activeConversation?.chatBackgroundUrl ? resolveAttachmentUrl(activeConversation.chatBackgroundUrl) : null;
+  const rawChatBackgroundUrl = user?.chatBackgroundUrl ?? activeConversation?.chatBackgroundUrl;
+  const chatBackgroundUrl = rawChatBackgroundUrl ? resolveAttachmentUrl(rawChatBackgroundUrl) : null;
   const chatBackgroundStyle = chatBackgroundUrl
     ? ({
         "--chat-bg": `url(${chatBackgroundUrl})`
       } as React.CSSProperties)
     : undefined;
-  const activeDisappearingLabel = activeConversationId ? disappearingByConversation[activeConversationId] ?? "Kapali" : "Kapali";
+  const activeDisappearingOption =
+    DISAPPEARING_OPTIONS.find((option) => option.durationSeconds === (activeConversation?.disappearingDurationSeconds ?? null)) ??
+    DISAPPEARING_OPTIONS[0];
+  const activeDisappearingLabel = activeDisappearingOption.label;
 
   const handleSelect = (conversationId: string) => {
     setActiveConversationId(conversationId);
@@ -328,7 +323,7 @@ export default function Chat() {
     if (otherMessageIds.length > 0) {
       const nextHiddenMessageIds = Array.from(new Set([...hiddenMessageIds, ...otherMessageIds]));
       setHiddenMessageIds(nextHiddenMessageIds);
-      writeStoredValue("chatly_hidden_messages", nextHiddenMessageIds);
+      writeStoredValue("talkio_hidden_messages", nextHiddenMessageIds);
     }
 
     setSelectedMessageIds([]);
@@ -364,9 +359,8 @@ export default function Chat() {
   const handleBackgroundUpload = async (file: File) => {
     if (!activeConversationId || !file.type.startsWith("image/")) return;
 
-    const updatedConversation = await uploadConversationBackground(activeConversationId, file);
-    upsertConversation(updatedConversation);
-    socket.emit(SOCKET_EVENTS.UPDATE_CONVERSATION, updatedConversation);
+    const updatedUser = await uploadChatBackground(file);
+    updateUser(updatedUser);
   };
 
   const handleBackgroundFileChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -378,9 +372,8 @@ export default function Chat() {
   const handleBackgroundRemove = async () => {
     if (!activeConversationId) return;
 
-    const updatedConversation = await removeConversationBackground(activeConversationId);
-    upsertConversation(updatedConversation);
-    socket.emit(SOCKET_EVENTS.UPDATE_CONVERSATION, updatedConversation);
+    const updatedUser = await removeChatBackground();
+    updateUser(updatedUser);
   };
 
   const handleEnableNotifications = async () => {
@@ -408,7 +401,7 @@ export default function Chat() {
 
   const handleBlockChat = () => {
     if (!activeConversationId) return;
-    toggleConversationList(activeConversationId, blockedConversationIds, setBlockedConversationIds, "chatly_blocked_conversations");
+    toggleConversationList(activeConversationId, blockedConversationIds, setBlockedConversationIds, "talkio_blocked_conversations");
   };
 
   const handleClearChat = () => {
@@ -418,7 +411,7 @@ export default function Chat() {
     setHiddenMessageIds(nextHiddenMessageIds);
     setSelectedMessageIds([]);
     setIsSelectionMode(false);
-    writeStoredValue("chatly_hidden_messages", nextHiddenMessageIds);
+    writeStoredValue("talkio_hidden_messages", nextHiddenMessageIds);
   };
 
   const handleCloseChat = () => {
@@ -439,7 +432,7 @@ export default function Chat() {
     if (!activeConversationId) return;
     const nextDeletedConversationIds = Array.from(new Set([...deletedConversationIds, activeConversationId]));
     setDeletedConversationIds(nextDeletedConversationIds);
-    writeStoredValue("chatly_deleted_conversations", nextDeletedConversationIds);
+    writeStoredValue("talkio_deleted_conversations", nextDeletedConversationIds);
     handleCloseChat();
   };
 
@@ -496,34 +489,36 @@ export default function Chat() {
 
   const handleFavoriteChat = () => {
     if (!activeConversationId) return;
-    toggleConversationList(activeConversationId, favoriteConversationIds, setFavoriteConversationIds, "chatly_favorite_conversations");
+    toggleConversationList(activeConversationId, favoriteConversationIds, setFavoriteConversationIds, "talkio_favorite_conversations");
   };
 
   const handleListChat = () => {
     if (!activeConversationId) return;
-    toggleConversationList(activeConversationId, listedConversationIds, setListedConversationIds, "chatly_listed_conversations");
+    toggleConversationList(activeConversationId, listedConversationIds, setListedConversationIds, "talkio_listed_conversations");
   };
 
   const handleMuteChat = () => {
     if (!activeConversationId) return;
-    toggleConversationList(activeConversationId, mutedConversationIds, setMutedConversationIds, "chatly_muted_conversations");
+    toggleConversationList(activeConversationId, mutedConversationIds, setMutedConversationIds, "talkio_muted_conversations");
   };
 
   const handleReportChat = () => {
     if (!activeConversationId) return;
     const nextReportedConversationIds = Array.from(new Set([...reportedConversationIds, activeConversationId]));
     setReportedConversationIds(nextReportedConversationIds);
-    writeStoredValue("chatly_reported_conversations", nextReportedConversationIds);
+    writeStoredValue("talkio_reported_conversations", nextReportedConversationIds);
     window.alert("Sikayet yerel olarak kaydedildi.");
   };
 
-  const handleSetDisappearing = () => {
+  const handleSetDisappearing = async () => {
     if (!activeConversationId) return;
-    const currentOption = disappearingByConversation[activeConversationId] ?? "Kapali";
-    const nextOption = DISAPPEARING_OPTIONS[(DISAPPEARING_OPTIONS.indexOf(currentOption) + 1) % DISAPPEARING_OPTIONS.length];
-    const nextDisappearingByConversation = { ...disappearingByConversation, [activeConversationId]: nextOption };
-    setDisappearingByConversation(nextDisappearingByConversation);
-    writeStoredValue("chatly_disappearing_conversations", nextDisappearingByConversation);
+    const currentIndex = DISAPPEARING_OPTIONS.findIndex(
+      (option) => option.durationSeconds === (activeConversation?.disappearingDurationSeconds ?? null)
+    );
+    const nextOption = DISAPPEARING_OPTIONS[(Math.max(currentIndex, 0) + 1) % DISAPPEARING_OPTIONS.length];
+    const updatedConversation = await updateDisappearingMessages(activeConversationId, nextOption.durationSeconds);
+    upsertConversation(updatedConversation);
+    socket.emit(SOCKET_EVENTS.UPDATE_CONVERSATION, updatedConversation);
   };
 
   const handleEmojiSelect = (emoji: string) => {
@@ -560,6 +555,11 @@ export default function Chat() {
 
   useEffect(() => {
     getUsers().then(setUsers).catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setExpiryTick(Date.now()), 30 * 1000);
+    return () => window.clearInterval(intervalId);
   }, []);
 
   useEffect(() => {
@@ -631,6 +631,7 @@ export default function Chat() {
         <ChatHeader
           conversation={activeConversation}
           disappearingLabel={activeDisappearingLabel}
+          hasBackground={Boolean(rawChatBackgroundUrl)}
           isBlocked={Boolean(activeConversationId && blockedConversationIds.includes(activeConversationId))}
           isFavorite={Boolean(activeConversationId && favoriteConversationIds.includes(activeConversationId))}
           isListed={Boolean(activeConversationId && listedConversationIds.includes(activeConversationId))}

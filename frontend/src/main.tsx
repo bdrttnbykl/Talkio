@@ -4,7 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import "./index.css";
 
-document.documentElement.dataset.theme = localStorage.getItem("chatly_theme") || "system";
+document.documentElement.dataset.theme = localStorage.getItem("talkio_theme") || "system";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

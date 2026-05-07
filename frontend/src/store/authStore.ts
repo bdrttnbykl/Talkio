@@ -9,24 +9,24 @@ type AuthState = {
   logout: () => void;
 };
 
-const storedToken = localStorage.getItem("chatly_token");
-const storedUser = localStorage.getItem("chatly_user");
+const storedToken = localStorage.getItem("talkio_token");
+const storedUser = localStorage.getItem("talkio_user");
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: storedUser ? JSON.parse(storedUser) : null,
   token: storedToken,
   setAuth: (user, token) => {
-    localStorage.setItem("chatly_token", token);
-    localStorage.setItem("chatly_user", JSON.stringify(user));
+    localStorage.setItem("talkio_token", token);
+    localStorage.setItem("talkio_user", JSON.stringify(user));
     set({ user, token });
   },
   updateUser: (user) => {
-    localStorage.setItem("chatly_user", JSON.stringify(user));
+    localStorage.setItem("talkio_user", JSON.stringify(user));
     set({ user });
   },
   logout: () => {
-    localStorage.removeItem("chatly_token");
-    localStorage.removeItem("chatly_user");
+    localStorage.removeItem("talkio_token");
+    localStorage.removeItem("talkio_user");
     set({ user: null, token: null });
   }
 }));

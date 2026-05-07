@@ -5,7 +5,8 @@ import {
   createGroupConversation,
   listConversations,
   markConversationRead,
-  updateConversationBackground
+  updateConversationBackground,
+  updateDisappearingMessages
 } from "./conversations.service.js";
 
 export async function getConversations(req: AuthRequest, res: Response) {
@@ -76,5 +77,25 @@ export async function removeConversationBackground(req: AuthRequest, res: Respon
     return res.json(conversation);
   } catch (error) {
     return res.status(400).json({ message: error instanceof Error ? error.message : "Background remove failed" });
+  }
+}
+
+export async function patchDisappearingMessages(req: AuthRequest, res: Response) {
+  try {
+    const { conversationId } = req.params;
+    const { durationSeconds } = req.body;
+
+    if (typeof conversationId !== "string") {
+      return res.status(400).json({ message: "conversationId is required" });
+    }
+
+    if (durationSeconds !== null && typeof durationSeconds !== "number") {
+      return res.status(400).json({ message: "durationSeconds must be a number or null" });
+    }
+
+    const conversation = await updateDisappearingMessages(req.userId!, conversationId, durationSeconds);
+    return res.json(conversation);
+  } catch (error) {
+    return res.status(400).json({ message: error instanceof Error ? error.message : "Disappearing messages update failed" });
   }
 }

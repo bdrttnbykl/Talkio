@@ -9,7 +9,19 @@ import { usersRoutes } from "./modules/users/users.routes.js";
 
 export const app = express();
 
-app.use(cors({ origin: env.clientUrl, credentials: true }));
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || env.clientUrls.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error("Not allowed by CORS"));
+    },
+    credentials: true
+  })
+);
 app.use(express.json());
 app.use("/uploads", express.static(path.resolve("uploads")));
 

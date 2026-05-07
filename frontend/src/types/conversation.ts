@@ -6,6 +6,7 @@ export type Conversation = {
   name?: string | null;
   isGroup?: boolean;
   chatBackgroundUrl?: string | null;
+  disappearingDurationSeconds?: number | null;
   participants: User[];
   messages?: Message[];
   unreadCount?: number;

@@ -28,11 +28,11 @@ export default function Settings() {
   const [name, setName] = useState(user?.name ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
   const [profileMessage, setProfileMessage] = useState("");
-  const [theme, setTheme] = useState<ThemeChoice>(() => (localStorage.getItem("chatly_theme") as ThemeChoice) || "system");
+  const [theme, setTheme] = useState<ThemeChoice>(() => (localStorage.getItem("talkio_theme") as ThemeChoice) || "system");
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">(
     "Notification" in window ? Notification.permission : "unsupported"
   );
-  const [muteAll, setMuteAll] = useState(() => localStorage.getItem("chatly_mute_all") === "true");
+  const [muteAll, setMuteAll] = useState(() => localStorage.getItem("talkio_mute_all") === "true");
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState("");
   const [privacy, setPrivacy] = useState(() => readPrivacySettings());
@@ -73,7 +73,7 @@ export default function Settings() {
 
   const handleThemeChange = (nextTheme: ThemeChoice) => {
     setTheme(nextTheme);
-    localStorage.setItem("chatly_theme", nextTheme);
+    localStorage.setItem("talkio_theme", nextTheme);
   };
 
   const handleEnableNotifications = async () => {
@@ -87,7 +87,7 @@ export default function Settings() {
 
   const handleMuteAllChange = (enabled: boolean) => {
     setMuteAll(enabled);
-    localStorage.setItem("chatly_mute_all", String(enabled));
+    localStorage.setItem("talkio_mute_all", String(enabled));
   };
 
   const handleBackgroundChange = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -109,7 +109,7 @@ export default function Settings() {
   const handlePrivacyChange = (key: keyof typeof privacy, enabled: boolean) => {
     const nextPrivacy = { ...privacy, [key]: enabled };
     setPrivacy(nextPrivacy);
-    localStorage.setItem("chatly_privacy", JSON.stringify(nextPrivacy));
+    localStorage.setItem("talkio_privacy", JSON.stringify(nextPrivacy));
   };
 
   if (!user) return null;
@@ -255,7 +255,7 @@ export default function Settings() {
 
 function readPrivacySettings() {
   try {
-    return { ...privacyDefaults, ...JSON.parse(localStorage.getItem("chatly_privacy") ?? "{}") };
+    return { ...privacyDefaults, ...JSON.parse(localStorage.getItem("talkio_privacy") ?? "{}") };
   } catch {
     return privacyDefaults;
   }

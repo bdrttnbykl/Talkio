@@ -5,6 +5,7 @@ import { Router } from "express";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
 import {
   getConversations,
+  patchDisappearingMessages,
   postConversation,
   readConversation,
   removeConversationBackground,
@@ -39,5 +40,6 @@ const backgroundUpload = multer({
 conversationsRoutes.get("/", authMiddleware, getConversations);
 conversationsRoutes.post("/", authMiddleware, postConversation);
 conversationsRoutes.patch("/:conversationId/read", authMiddleware, readConversation);
+conversationsRoutes.patch("/:conversationId/disappearing-messages", authMiddleware, patchDisappearingMessages);
 conversationsRoutes.post("/:conversationId/background", authMiddleware, backgroundUpload.single("background"), uploadConversationBackground);
 conversationsRoutes.delete("/:conversationId/background", authMiddleware, removeConversationBackground);

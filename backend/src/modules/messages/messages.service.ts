@@ -32,11 +32,29 @@ const messageInclude = {
   }
 };
 
+function getExpiryDate(durationSeconds: number | null | undefined) {
+  if (!durationSeconds) return null;
+
+  return new Date(Date.now() + durationSeconds * 1000);
+}
+
+async function pruneExpiredMessages(conversationId: string) {
+  await prisma.message.deleteMany({
+    where: {
+      conversationId,
+      expiresAt: { lte: new Date() }
+    }
+  });
+}
+
 export async function listMessages(userId: string, conversationId: string) {
+  await pruneExpiredMessages(conversationId);
+
   const messages = await prisma.message.findMany({
     where: {
       conversationId,
-      conversation: { participants: { some: { userId } } }
+      conversation: { participants: { some: { userId } } },
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }]
     },
     include: messageInclude,
     orderBy: { createdAt: "asc" }
@@ -63,7 +81,12 @@ export async function createMessage(
   replyToId?: string | null
 ) {
   const participant = await prisma.participant.findUnique({
-    where: { userId_conversationId: { userId, conversationId } }
+    where: { userId_conversationId: { userId, conversationId } },
+    include: {
+      conversation: {
+        select: { disappearingDurationSeconds: true }
+      }
+    }
   });
 
   if (!participant) {
@@ -89,6 +112,7 @@ export async function createMessage(
       attachmentType: attachment?.type,
       attachmentSize: attachment?.size,
       replyToId,
+      expiresAt: getExpiryDate(participant.conversation.disappearingDurationSeconds),
       senderId: userId,
       conversationId
     },

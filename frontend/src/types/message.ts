@@ -28,6 +28,7 @@ export type Message = {
   reactions?: MessageReaction[];
   createdAt: string;
   editedAt?: string | null;
+  expiresAt?: string | null;
   isPinned?: boolean;
   pinnedAt?: string | null;
   readByOthers?: boolean;
