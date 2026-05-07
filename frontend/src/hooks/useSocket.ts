@@ -18,8 +18,11 @@ export function useSocket() {
     if (!token) return;
 
     socket.auth = { token };
-    socket.connect();
-    socket.emit(SOCKET_EVENTS.PRESENCE_SYNC);
+    const syncPresence = () => {
+      socket.emit(SOCKET_EVENTS.PRESENCE_SYNC);
+    };
+
+    socket.on("connect", syncPresence);
     socket.on(SOCKET_EVENTS.CONVERSATION_UPDATED, () => {
       const { setConversations } = useChatStore.getState();
       getConversations().then(setConversations).catch(console.error);
@@ -71,7 +74,14 @@ export function useSocket() {
       if (!payload.isOnline) getConversations().then(setConversations).catch(console.error);
     });
 
+    socket.connect();
+
+    if (socket.connected) {
+      syncPresence();
+    }
+
     return () => {
+      socket.off("connect", syncPresence);
       socket.off(SOCKET_EVENTS.NEW_MESSAGE);
       socket.off(SOCKET_EVENTS.CONVERSATION_UPDATED);
       socket.off(SOCKET_EVENTS.MESSAGE_UPDATED);
@@ -81,6 +91,8 @@ export function useSocket() {
       socket.off(SOCKET_EVENTS.CONVERSATION_READ);
       socket.off(SOCKET_EVENTS.PRESENCE_LIST);
       socket.off(SOCKET_EVENTS.PRESENCE_UPDATE);
+      const { setOnlineUsers } = useChatStore.getState();
+      setOnlineUsers([]);
       socket.disconnect();
     };
   }, [token]);
