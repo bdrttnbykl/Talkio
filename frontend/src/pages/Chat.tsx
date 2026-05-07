@@ -32,6 +32,12 @@ const DISAPPEARING_OPTIONS = [
   { label: "90g", durationSeconds: 90 * 24 * 60 * 60 }
 ] as const;
 
+type TypingPayload = {
+  conversationId: string;
+  userId: string;
+  isTyping: boolean;
+};
+
 function readStoredArray(key: string) {
   try {
     const value = localStorage.getItem(key);
@@ -110,6 +116,9 @@ export default function Chat() {
   const logout = useAuthStore((state) => state.logout);
   const backgroundInputRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const typingTimeoutRef = useRef<number | null>(null);
+  const incomingTypingTimeoutsRef = useRef<Record<string, number>>({});
+  const isTypingRef = useRef(false);
   const {
     activeConversationId,
     conversations,
@@ -125,6 +134,7 @@ export default function Chat() {
     reset
   } = useChatStore();
   const [content, setContent] = useState("");
+  const [typingUserIds, setTypingUserIds] = useState<string[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -210,8 +220,24 @@ export default function Chat() {
     DISAPPEARING_OPTIONS.find((option) => option.durationSeconds === (activeConversation?.disappearingDurationSeconds ?? null)) ??
     DISAPPEARING_OPTIONS[0];
   const activeDisappearingLabel = activeDisappearingOption.label;
+  const typingNames = useMemo(
+    () =>
+      typingUserIds
+        .map((typingUserId) => activeConversation?.participants.find((participant) => participant.id === typingUserId)?.name)
+        .filter(Boolean) as string[],
+    [activeConversation?.participants, typingUserIds]
+  );
+  const typingLabel = typingNames.length > 1 ? `${typingNames.slice(0, 2).join(", ")} yaziyor...` : typingNames[0] ? `${typingNames[0]} yaziyor...` : "";
+
+  const emitTyping = (isTyping: boolean) => {
+    if (!activeConversationId || isActiveBlocked || isTypingRef.current === isTyping) return;
+
+    isTypingRef.current = isTyping;
+    socket.emit(SOCKET_EVENTS.TYPING, { conversationId: activeConversationId, isTyping });
+  };
 
   const handleSelect = (conversationId: string) => {
+    emitTyping(false);
     setActiveConversationId(conversationId);
     markConversationRead(conversationId);
     markConversationReadRequest(conversationId)
@@ -243,6 +269,7 @@ export default function Chat() {
       const message = await sendMessage(activeConversationId, content.trim(), attachment, replyToMessage?.id);
       addMessage(message);
       socket.emit(SOCKET_EVENTS.SEND_MESSAGE, message);
+      emitTyping(false);
       setContent("");
       setReplyToMessage(null);
       setIsEmojiPickerOpen(false);
@@ -415,6 +442,7 @@ export default function Chat() {
   };
 
   const handleCloseChat = () => {
+    emitTyping(false);
     setActiveConversationId(null);
     setIsEmojiPickerOpen(false);
     setIsInfoOpen(false);
@@ -523,6 +551,30 @@ export default function Chat() {
 
   const handleEmojiSelect = (emoji: string) => {
     setContent((currentContent) => `${currentContent}${emoji}`);
+    scheduleTypingStop();
+    emitTyping(true);
+  };
+
+  const handleContentChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setContent(event.target.value);
+
+    if (!event.target.value.trim()) {
+      emitTyping(false);
+      return;
+    }
+
+    emitTyping(true);
+    scheduleTypingStop();
+  };
+
+  const scheduleTypingStop = () => {
+    if (typingTimeoutRef.current) {
+      window.clearTimeout(typingTimeoutRef.current);
+    }
+
+    typingTimeoutRef.current = window.setTimeout(() => {
+      emitTyping(false);
+    }, 1500);
   };
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -569,6 +621,36 @@ export default function Chat() {
   }, [conversations, socket]);
 
   useEffect(() => {
+    const handleUserTyping = (payload: TypingPayload) => {
+      if (payload.conversationId !== activeConversationId || payload.userId === user?.id) return;
+
+      if (incomingTypingTimeoutsRef.current[payload.userId]) {
+        window.clearTimeout(incomingTypingTimeoutsRef.current[payload.userId]);
+        delete incomingTypingTimeoutsRef.current[payload.userId];
+      }
+
+      if (!payload.isTyping) {
+        setTypingUserIds((currentIds) => currentIds.filter((userId) => userId !== payload.userId));
+        return;
+      }
+
+      setTypingUserIds((currentIds) => (currentIds.includes(payload.userId) ? currentIds : [...currentIds, payload.userId]));
+      incomingTypingTimeoutsRef.current[payload.userId] = window.setTimeout(() => {
+        setTypingUserIds((currentIds) => currentIds.filter((userId) => userId !== payload.userId));
+        delete incomingTypingTimeoutsRef.current[payload.userId];
+      }, 3000);
+    };
+
+    socket.on(SOCKET_EVENTS.USER_TYPING, handleUserTyping);
+
+    return () => {
+      socket.off(SOCKET_EVENTS.USER_TYPING, handleUserTyping);
+    };
+  }, [activeConversationId, socket, user?.id]);
+
+  useEffect(() => {
+    isTypingRef.current = false;
+    setTypingUserIds([]);
     setIsEmojiPickerOpen(false);
     setIsInfoOpen(false);
     setIsMediaPanelOpen(false);
@@ -577,6 +659,19 @@ export default function Chat() {
     setReplyToMessage(null);
     setSelectedMessageIds([]);
   }, [activeConversationId]);
+
+  useEffect(
+    () => () => {
+      emitTyping(false);
+
+      if (typingTimeoutRef.current) {
+        window.clearTimeout(typingTimeoutRef.current);
+      }
+
+      Object.values(incomingTypingTimeoutsRef.current).forEach((timeoutId) => window.clearTimeout(timeoutId));
+    },
+    []
+  );
 
   useEffect(() => {
     if (galleryIndex === null) return;
@@ -758,6 +853,7 @@ export default function Chat() {
           )}
         </div>
         <form className="message-form" onSubmit={handleSubmit}>
+          {typingLabel ? <div className="typing-indicator">{typingLabel}</div> : null}
           {replyToMessage ? (
             <div className="reply-compose">
               <div>
@@ -781,7 +877,7 @@ export default function Chat() {
           {fileError ? <p className="form-error">{fileError}</p> : null}
           <Input
             value={content}
-            onChange={(event) => setContent(event.target.value)}
+            onChange={handleContentChange}
             placeholder={isActiveBlocked ? "Bu sohbet engellendi" : activeConversationId ? "Mesaj yaz" : "Once bir sohbet sec"}
             disabled={!activeConversationId || isActiveBlocked || isSending}
           />

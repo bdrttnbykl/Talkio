@@ -15,6 +15,8 @@ const SOCKET_EVENTS = {
   MESSAGE_PINNED: "message:pinned",
   DELETE_MESSAGE: "message:delete",
   MESSAGE_DELETED: "message:deleted",
+  TYPING: "message:typing",
+  USER_TYPING: "message:user-typing",
   MARK_READ: "conversation:read",
   CONVERSATION_READ: "conversation:read-receipt"
 } as const;
@@ -117,6 +119,26 @@ export function registerChatSocket(io: Server, socket: Socket) {
     if (!participant) return;
 
     await emitToOtherParticipants(io, socket, payload.conversationId, SOCKET_EVENTS.MESSAGE_DELETED, payload);
+  });
+
+  socket.on(SOCKET_EVENTS.TYPING, async (payload) => {
+    const conversationId = typeof payload?.conversationId === "string" ? payload.conversationId : null;
+    const isTyping = Boolean(payload?.isTyping);
+
+    if (!conversationId) return;
+
+    const participant = await prisma.participant.findUnique({
+      where: { userId_conversationId: { userId: socket.data.userId, conversationId } },
+      select: { id: true }
+    });
+
+    if (!participant) return;
+
+    await emitToOtherParticipants(io, socket, conversationId, SOCKET_EVENTS.USER_TYPING, {
+      conversationId,
+      userId: socket.data.userId,
+      isTyping
+    });
   });
 
   socket.on(SOCKET_EVENTS.MARK_READ, async (payload) => {

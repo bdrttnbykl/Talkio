@@ -12,6 +12,8 @@ export const SOCKET_EVENTS = {
   MESSAGE_PINNED: "message:pinned",
   DELETE_MESSAGE: "message:delete",
   MESSAGE_DELETED: "message:deleted",
+  TYPING: "message:typing",
+  USER_TYPING: "message:user-typing",
   MARK_READ: "conversation:read",
   CONVERSATION_READ: "conversation:read-receipt",
   PRESENCE_SYNC: "presence:sync",
