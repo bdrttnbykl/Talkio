@@ -1,4 +1,5 @@
 import { FormEvent, useState } from "react";
+import { AxiosError } from "axios";
 import { Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import Button from "../components/ui/Button";
@@ -8,10 +9,21 @@ export default function Login() {
   const { signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    await signIn({ email, password });
+    setErrorMessage("");
+    setIsSubmitting(true);
+
+    try {
+      await signIn({ email, password });
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error, "Login failed."));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -23,9 +35,21 @@ export default function Login() {
         <Link className="auth-link" to="/forgot-password">
           Şifremi unuttum
         </Link>
-        <Button type="submit">Log in</Button>
+        {errorMessage ? <p className="form-error">{errorMessage}</p> : null}
+        <Button type="submit" disabled={isSubmitting}>
+          {isSubmitting ? "Logging in..." : "Log in"}
+        </Button>
         <Link to="/register">Create account</Link>
       </form>
     </main>
   );
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof AxiosError) {
+    const message = (error.response?.data as { message?: string } | undefined)?.message;
+    return message ?? fallback;
+  }
+
+  return error instanceof Error ? error.message : fallback;
 }
