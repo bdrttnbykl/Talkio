@@ -706,7 +706,7 @@ export default function Chat() {
   }, [activeConversationId, galleryIndex, setActiveConversationId]);
 
   return (
-    <main className="chat-layout">
+    <main className={activeConversationId ? "chat-layout has-active-chat" : "chat-layout"}>
       <Sidebar
         conversations={visibleConversations}
         users={users}
