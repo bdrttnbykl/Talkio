@@ -120,6 +120,18 @@ export async function createMessage(
   }).then((message) => ({ ...message, readByOthers: false }));
 }
 
+export async function listMessageRecipientIds(senderId: string, conversationId: string) {
+  const participants = await prisma.participant.findMany({
+    where: {
+      conversationId,
+      userId: { not: senderId }
+    },
+    select: { userId: true }
+  });
+
+  return participants.map((participant) => participant.userId);
+}
+
 export async function updateMessage(userId: string, messageId: string, content: string) {
   const message = await prisma.message.findUnique({
     where: { id: messageId },

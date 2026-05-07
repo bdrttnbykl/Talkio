@@ -4,6 +4,7 @@ import { env, isAllowedOrigin } from "../config/env.js";
 import { verifyToken } from "../utils/jwt.js";
 import { registerChatSocket } from "./chat.socket.js";
 import { prisma } from "../config/prisma.js";
+import { setSocketServer } from "./io.js";
 
 const onlineUsers = new Map<string, number>();
 
@@ -45,6 +46,8 @@ export function createSocketServer(server: HttpServer) {
       return next(new Error("Invalid token"));
     }
   });
+
+  setSocketServer(io);
 
   io.on("connection", (socket) => {
     const userId = socket.data.userId as string;

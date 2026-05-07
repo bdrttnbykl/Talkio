@@ -268,7 +268,6 @@ export default function Chat() {
       const attachment = selectedFile ? await uploadMessageFile(selectedFile) : undefined;
       const message = await sendMessage(activeConversationId, content.trim(), attachment, replyToMessage?.id);
       addMessage(message);
-      socket.emit(SOCKET_EVENTS.SEND_MESSAGE, message);
       emitTyping(false);
       setContent("");
       setReplyToMessage(null);
@@ -320,7 +319,6 @@ export default function Chat() {
     );
 
     if (conversationId === activeConversationId) addMessage(forwardedMessage);
-    socket.emit(SOCKET_EVENTS.SEND_MESSAGE, forwardedMessage);
     setForwardMessage(null);
   };
 

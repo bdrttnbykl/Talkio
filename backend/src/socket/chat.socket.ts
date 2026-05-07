@@ -25,7 +25,7 @@ export function registerChatSocket(io: Server, socket: Socket) {
   socket.join(`user:${socket.data.userId}`);
 
   socket.on(SOCKET_EVENTS.JOIN_CONVERSATION, (conversationId: string) => {
-    socket.join(conversationId);
+    socket.join(`conversation:${conversationId}`);
   });
 
   socket.on(SOCKET_EVENTS.UPDATE_CONVERSATION, async (conversation) => {
@@ -43,17 +43,6 @@ export function registerChatSocket(io: Server, socket: Socket) {
 
   socket.on(SOCKET_EVENTS.SEND_MESSAGE, async (message) => {
     if (!message || message.senderId !== socket.data.userId) return;
-
-    const participants = await prisma.participant.findMany({
-      where: { conversationId: message.conversationId },
-      select: { userId: true }
-    });
-
-    participants
-      .filter((participant) => participant.userId !== socket.data.userId)
-      .forEach((participant) => {
-        io.to(`user:${participant.userId}`).emit(SOCKET_EVENTS.NEW_MESSAGE, message);
-      });
   });
 
   socket.on(SOCKET_EVENTS.UPDATE_MESSAGE, async (message) => {

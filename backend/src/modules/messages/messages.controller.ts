@@ -1,8 +1,18 @@
 import type { Response } from "express";
 import type { AuthRequest } from "../../middlewares/auth.middleware.js";
-import { createMessage, deleteMessage, listMessages, toggleMessagePin, toggleMessageReaction, updateMessage } from "./messages.service.js";
+import { getSocketServer } from "../../socket/io.js";
+import {
+  createMessage,
+  deleteMessage,
+  listMessageRecipientIds,
+  listMessages,
+  toggleMessagePin,
+  toggleMessageReaction,
+  updateMessage
+} from "./messages.service.js";
 
 const allowedReactionTypes = new Set(["like", "heart", "laugh", "wow", "sad", "pray"]);
+const NEW_MESSAGE_EVENT = "message:new";
 
 export async function getMessages(req: AuthRequest, res: Response) {
   const { conversationId } = req.params;
@@ -24,6 +34,10 @@ export async function postMessage(req: AuthRequest, res: Response) {
     }
 
     const message = await createMessage(req.userId!, conversationId, content ?? "", attachment ?? null, replyToId ?? null);
+    const recipientIds = await listMessageRecipientIds(req.userId!, conversationId);
+    recipientIds.forEach((recipientId) => {
+      getSocketServer()?.to(`user:${recipientId}`).emit(NEW_MESSAGE_EVENT, message);
+    });
     return res.status(201).json(message);
   } catch (error) {
     return res.status(400).json({ message: error instanceof Error ? error.message : "Message failed" });
