@@ -1,6 +1,6 @@
 import type { Server as HttpServer } from "http";
 import { Server } from "socket.io";
-import { env } from "../config/env.js";
+import { env, isAllowedOrigin } from "../config/env.js";
 import { verifyToken } from "../utils/jwt.js";
 import { registerChatSocket } from "./chat.socket.js";
 import { prisma } from "../config/prisma.js";
@@ -18,7 +18,14 @@ function emitPresence(io: Server, userId: string, isOnline: boolean, lastSeenAt?
 export function createSocketServer(server: HttpServer) {
   const io = new Server(server, {
     cors: {
-      origin: env.clientUrls,
+      origin: (origin, callback) => {
+        if (!origin || isAllowedOrigin(origin)) {
+          callback(null, true);
+          return;
+        }
+
+        callback(new Error("Not allowed by CORS"));
+      },
       credentials: true
     }
   });

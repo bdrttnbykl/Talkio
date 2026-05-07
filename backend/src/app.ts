@@ -1,7 +1,7 @@
 import cors from "cors";
 import express from "express";
 import path from "path";
-import { env } from "./config/env.js";
+import { isAllowedOrigin } from "./config/env.js";
 import { authRoutes } from "./modules/auth/auth.routes.js";
 import { conversationsRoutes } from "./modules/conversations/conversations.routes.js";
 import { messagesRoutes } from "./modules/messages/messages.routes.js";
@@ -12,7 +12,7 @@ export const app = express();
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || env.clientUrls.includes(origin)) {
+      if (!origin || isAllowedOrigin(origin)) {
         callback(null, true);
         return;
       }
